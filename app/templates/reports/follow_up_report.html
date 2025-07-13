@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>医生随访报告</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            color: #333;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            border-bottom: 2px solid #0066cc;
+            padding-bottom: 10px;
+        }
+        .header h1 {
+            color: #0066cc;
+            margin: 0;
+        }
+        .report-section {
+            margin-bottom: 20px;
+        }
+        .section-title {
+            font-weight: bold;
+            color: #0066cc;
+            margin-bottom: 5px;
+        }
+        .footer {
+            margin-top: 30px;
+            text-align: right;
+            font-style: italic;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>老年人健康随访报告</h1>
+        <p>报告生成时间：{{ now }}</p>
+    </div>
+
+    <div class="report-section">
+        <div class="section-title">基本信息</div>
+        <p><strong>老年人姓名：</strong>{{ report.elderly_name }}</p>
+        <p><strong>随访医生：</strong>{{ report.doctor_name }}</p>
+        <p><strong>随访时间：</strong>{{ report.follow_up_date }}</p>
+    </div>
+
+    <div class="report-section">
+        <div class="section-title">随访内容</div>
+        <p>{{ report.content }}</p>
+    </div>
+
+    <div class="report-section">
+        <div class="section-title">随访结果</div>
+        <p>{{ report.result }}</p>
+    </div>
+
+    {% if report.next_follow_up_date %}
+    <div class="report-section">
+        <div class="section-title">下次随访时间</div>
+        <p>{{ report.next_follow_up_date }}</p>
+    </div>
+    {% endif %}
+
+    <div class="footer">
+        <p>报告生成时间：{{ now }}</p>
+    </div>
+</body>
+</html>
