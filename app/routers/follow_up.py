@@ -1,13 +1,16 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 import logging
-from datetime import datetime
+from datetime import datetime,timezone
+from pydantic import BaseModel, validator
 
 from .. import schemas, crud
 from ..database import SessionLocal
 from pathlib import Path
+
+from ..models import FollowUp
 
 # 在 follow_up.py 中修改
 template_dir = Path(__file__).parent.parent / "templates"
@@ -46,31 +49,37 @@ def get_db():
     finally:
         db.close()
 
+class FollowUpCreate(BaseModel):
+    elderly_id: int
+    doctor_id: int
+    follow_up_date: str  # 使用字符串格式接收
+    content: str = ""
+    result: str = ""
 
-@router.post(
-    "/follow-ups",
-    response_model=schemas.FollowUp,
-    status_code=status.HTTP_201_CREATED
-)
+    @validator('follow_up_date')
+    def validate_date(cls, v):
+        # 如果已经是datetime对象，直接返回
+        if isinstance(v, datetime):
+            return v
+        try:
+            return datetime.strptime(v, "%Y-%m-%d %H:%M:%S")
+        except (ValueError, TypeError):
+            raise ValueError("日期格式应为 YYYY-MM-DD HH:mm:ss")
+
+@router.post("/follow-ups")
 async def create_follow_up(
     follow_up: schemas.FollowUpCreate,
     db: Session = Depends(get_db)
 ):
-    """
-    创建随访记录（移除前置验证，完全依赖crud层的自动创建）
-    """
     try:
-        return crud.create_follow_up(db=db, follow_up=follow_up)
-    except HTTPException as e:
-        # 保留原始HTTP异常
-        raise
-    except Exception as e:
-        logger.error(f"创建随访记录失败: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"服务器处理请求时发生错误: {str(e)}"
-        )
+        # 确保follow_up_date是datetime对象
+        if isinstance(follow_up.follow_up_date, str):
+            follow_up.follow_up_date = datetime.strptime(follow_up.follow_up_date, "%Y-%m-%d %H:%M:%S")
 
+        return crud.create_follow_up(db, follow_up)
+    except Exception as e:
+        logger.error(f"创建随访记录失败: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
 @router.get(
     "/follow-ups",
     response_model=List[schemas.FollowUp],
@@ -120,27 +129,126 @@ async def get_follow_up_report(
         follow_up_id: int,
         db: Session = Depends(get_db)
 ):
-    """生成可打印的HTML格式随访报告"""
     try:
+        logger.info(f"请求报告 - ID: {follow_up_id}")
         report_data = crud.get_follow_up_report_data(db, follow_up_id=follow_up_id)
-        current_time = datetime.now().strftime("%Y年%m月%d日 %H:%M")
-        report_data["report_date"] = datetime.now().strftime("%Y年%m月%d日")
 
+        if not report_data:
+            logger.error(f"报告数据为空 - ID: {follow_up_id}")
+            raise HTTPException(status_code=404, detail="报告数据为空")
+
+        logger.debug(f"报告数据: {report_data}")
         return templates.TemplateResponse(
             "reports/follow_up_report.html",
             {
                 "request": request,
                 "report": report_data,
-                "now": current_time,
+                "now": datetime.now().strftime("%Y年%m月%d日 %H:%M"),
                 "title": f"随访报告 #{follow_up_id}"
             }
         )
-    except HTTPException:
-        # 直接传递HTTP异常
-        raise
     except Exception as e:
-        logger.error(f"服务器内部错误: {str(e)}", exc_info=True)
+        logger.error(f"报告生成失败 - ID: {follow_up_id} - 错误: {str(e)}", exc_info=True)
+        raise
+
+
+
+# 在follow_up.py中添加以下路由
+
+# 患者管理路由
+@router.post(
+    "/elderly",
+    response_model=schemas.Elderly,
+    status_code=status.HTTP_201_CREATED,
+    summary="创建老人信息",
+    description="添加一个新的老人信息"
+)
+async def create_elderly(
+    elderly: schemas.ElderlyCreate,
+    db: Session = Depends(get_db)
+):
+    return crud.create_elderly(db=db, elderly=elderly)
+
+@router.delete(
+    "/elderly/{elderly_id}",
+    status_code=status.HTTP_200_OK,
+    summary="删除老人信息",
+    description="根据ID删除老人信息"
+)
+async def delete_elderly(
+    elderly_id: int,
+    db: Session = Depends(get_db)
+):
+    return crud.delete_elderly(db=db, elderly_id=elderly_id)
+
+# 医生管理路由
+@router.post(
+    "/doctors",
+    response_model=schemas.Doctor,
+    status_code=status.HTTP_201_CREATED,
+    summary="创建医生信息",
+    description="添加一个新的医生信息"
+)
+async def create_doctor(
+    doctor: schemas.DoctorCreate,
+    db: Session = Depends(get_db)
+):
+    return crud.create_doctor(db=db, doctor=doctor)
+
+@router.delete(
+    "/doctors/{doctor_id}",
+    status_code=status.HTTP_200_OK,
+    summary="删除医生信息",
+    description="根据ID删除医生信息"
+)
+async def delete_doctor(
+    doctor_id: int,
+    db: Session = Depends(get_db)
+):
+    return crud.delete_doctor(db=db, doctor_id=doctor_id)
+
+@router.get(
+    "/elderly",
+    response_model=List[schemas.Elderly],
+    summary="获取老人列表",
+    description="获取所有老人信息列表"
+)
+async def read_elderlies(
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db)
+):
+    return crud.get_elderlies(db, skip=skip, limit=limit)
+
+@router.get(
+    "/doctors",
+    response_model=List[schemas.Doctor],
+    summary="获取医生列表",
+    description="获取所有医生信息列表"
+)
+async def read_doctors(
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db)
+):
+    return crud.get_doctors(db, skip=skip, limit=limit)
+
+@router.delete(
+    "/follow-ups/{follow_up_id}",
+    status_code=status.HTTP_200_OK,
+    summary="删除随访记录",
+    description="根据ID删除随访记录"
+)
+async def delete_follow_up(
+    follow_up_id: int,
+    db: Session = Depends(get_db)
+):
+    """删除随访记录"""
+    try:
+        return crud.delete_follow_up(db, follow_up_id=follow_up_id)
+    except Exception as e:
+        logger.error(f"删除随访记录失败: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="服务器内部错误"
+            detail="删除随访记录失败"
         )

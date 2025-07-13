@@ -1,18 +1,30 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import FollowUpListView from '../views/follow-up/ListView.vue'
+import ElderlyListView from '@/views/elderly/ListView.vue'
+import DoctorListView from '@/views/doctor/ListView.vue'
+import FollowUpListView from '@/views/follow-up/ListView.vue'
 
 const routes = [
   {
     path: '/',
-    redirect: '/follow-ups'
+    redirect: '/elderly'
+  },
+  {
+    path: '/elderly',
+    name: 'ElderlyList',
+    component: ElderlyListView
+  },
+  {
+    path: '/doctors',
+    name: 'DoctorList',
+    component: DoctorListView
   },
   {
     path: '/follow-ups',
-    name: 'follow-up-list',
-    component: FollowUpListView,
-    meta: { title: '随访记录管理' }
+    name: 'FollowUpList',
+    component: FollowUpListView
   }
 ]
+
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),

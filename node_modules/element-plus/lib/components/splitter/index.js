@@ -2,9 +2,9 @@
 
 Object.defineProperty(exports, '__esModule', { value: true });
 
-var splitter$1 = require('./src/splitter.js');
+var splitter$1 = require('./src/splitter2.js');
 var splitPanel$1 = require('./src/split-panel2.js');
-var splitter = require('./src/splitter2.js');
+var splitter = require('./src/splitter.js');
 var splitPanel = require('./src/split-panel.js');
 var install = require('../../utils/vue/install.js');
 

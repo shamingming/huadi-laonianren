@@ -1,14 +1,15 @@
 from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, func
+from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import relationship
-from datetime import datetime
+from datetime import datetime,timezone
 from .database import Base
 
 
 class Elderly(Base):
     __tablename__ = "elderly"
 
-    id = Column(Integer, primary_key=True)
-    name = Column(String(50), default="未命名老人")
+    id = Column(Integer, primary_key=True,index=True)
+    name = Column(String(50), index=True)
     gender = Column(String(10), default="未知")
     age = Column(Integer, default=60)
     contact = Column(String(20), default="未填写")
@@ -19,12 +20,11 @@ class Elderly(Base):
 class Doctor(Base):
     __tablename__ = "doctors"
 
-    id = Column(Integer, primary_key=True)
-    name = Column(String(50), default="未命名医生")
+    id = Column(Integer, primary_key=True,index= True)
+    name = Column(String(50), index=True)
     department = Column(String(50), default="全科")
     contact = Column(String(20), default="未填写")
     follow_ups = relationship("FollowUp", back_populates="doctor")
-
 
 class FollowUp(Base):
     __tablename__ = "follow_ups"
@@ -41,3 +41,7 @@ class FollowUp(Base):
     medication_warning = Column(String(200), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    @hybrid_property
+    def follow_up_date_utc(self):
+        return self.follow_up_date.astimezone(timezone.utc) if self.follow_up_date else None

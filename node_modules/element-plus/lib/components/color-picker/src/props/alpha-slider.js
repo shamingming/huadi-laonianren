@@ -9,10 +9,7 @@ const alphaSliderProps = runtime.buildProps({
     type: runtime.definePropType(Object),
     required: true
   },
-  vertical: {
-    type: Boolean,
-    default: false
-  }
+  vertical: Boolean
 });
 
 exports.alphaSliderProps = alphaSliderProps;

@@ -23,9 +23,9 @@ class FollowUpCreate(FollowUpBase):
 class FollowUpCreate(BaseModel):
     elderly_id: int
     doctor_id: int
-    follow_up_date: datetime
-    content: str = Field(..., max_length=500)
-    result: str = Field(..., max_length=500)
+    follow_up_date: str
+    content: Optional[str] = None
+    result: Optional[str] = None
     next_follow_up_date: Optional[datetime] = None
     medication_warning: Optional[str] = Field(
         None,
@@ -34,10 +34,14 @@ class FollowUpCreate(BaseModel):
     )
 
     @validator('follow_up_date')
-    def validate_future_date(cls, v):
-        if v and v < datetime.now(timezone.utc):
-            raise ValueError("随访日期不能是过去时间")
-        return v
+    def validate_date(cls, v):
+        try:
+            # 允许带或不带时区的 ISO 格式
+            if 'Z' not in v and '+' not in v:
+                v += 'Z'  # 默认 UTC 时区
+            return datetime.fromisoformat(v.replace('Z', '+00:00'))
+        except ValueError as e:
+            raise ValueError(f"日期格式无效，应为 ISO 8601 格式: {e}")
 
 
 class FollowUp(FollowUpBase):
@@ -59,3 +63,42 @@ class FollowUpReport(BaseModel):
         None,
         description="下次随访日期"
     )
+
+
+# 在schemas.py中添加以下内容
+
+class ElderlyBase(BaseModel):
+    name: str = Field(..., max_length=50, description="姓名")
+    gender: str = Field("未知", max_length=10, description="性别")
+    age: int = Field(60, description="年龄")
+    contact: str = Field("未填写", max_length=20, description="联系方式")
+    address: str = Field("未填写", max_length=200, description="住址")
+
+
+class ElderlyCreate(ElderlyBase):
+    pass
+
+
+class Elderly(ElderlyBase):
+    id: int
+
+
+    class Config:
+        from_attributes = True
+
+
+class DoctorBase(BaseModel):
+    name: str = Field(..., max_length=50, description="姓名")
+    department: str = Field("全科", max_length=50, description="科室")
+    contact: str = Field("未填写", max_length=20, description="联系方式")
+
+
+class DoctorCreate(DoctorBase):
+    pass
+
+
+class Doctor(DoctorBase):
+    id: int
+
+    class Config:
+        from_attributes = True

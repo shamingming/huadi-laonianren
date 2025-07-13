@@ -1,7 +1,7 @@
 import { isNil } from 'lodash-unified';
 import { buildProps, definePropType } from '../../../utils/vue/props/runtime.mjs';
 import { useSizeProp } from '../../../hooks/use-size/index.mjs';
-import { useTooltipContentProps } from '../../tooltip/src/content2.mjs';
+import { useTooltipContentProps } from '../../tooltip/src/content.mjs';
 import { useEmptyValuesProps } from '../../../hooks/use-empty-values/index.mjs';
 import { useAriaProps } from '../../../hooks/use-aria/index.mjs';
 import { UPDATE_MODEL_EVENT, CHANGE_EVENT } from '../../../constants/event.mjs';

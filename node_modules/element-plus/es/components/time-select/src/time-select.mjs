@@ -38,10 +38,7 @@ const timeSelectProps = buildProps({
   },
   minTime: String,
   maxTime: String,
-  includeEndTime: {
-    type: Boolean,
-    default: false
-  },
+  includeEndTime: Boolean,
   name: String,
   prefixIcon: {
     type: definePropType([String, Object]),

@@ -2,6 +2,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
+
 SQLALCHEMY_DATABASE_URL = "mysql+pymysql://root:xhnmdl0407@localhost/elderly_health_db"
 
 # 创建数据库引擎

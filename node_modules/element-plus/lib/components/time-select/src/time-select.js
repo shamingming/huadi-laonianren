@@ -42,10 +42,7 @@ const timeSelectProps = runtime.buildProps({
   },
   minTime: String,
   maxTime: String,
-  includeEndTime: {
-    type: Boolean,
-    default: false
-  },
+  includeEndTime: Boolean,
   name: String,
   prefixIcon: {
     type: runtime.definePropType([String, Object]),

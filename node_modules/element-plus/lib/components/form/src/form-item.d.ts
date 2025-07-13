@@ -1,4 +1,4 @@
-import type { ExtractPropTypes } from 'vue';
+import type { ExtractPropTypes, __ExtractPublicPropTypes } from 'vue';
 import type { Arrayable } from 'element-plus/es/utils';
 import type { FormItemRule } from './types';
 export declare const formItemValidateStates: readonly ["", "error", "validating", "success"];
@@ -39,3 +39,4 @@ export declare const formItemProps: {
     };
 };
 export type FormItemProps = ExtractPropTypes<typeof formItemProps>;
+export type FormItemPropsPublic = __ExtractPublicPropTypes<typeof formItemProps>;
