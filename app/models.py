@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, func
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, func, Boolean
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import relationship
 from datetime import datetime,timezone
@@ -41,6 +41,11 @@ class FollowUp(Base):
     medication_warning = Column(String(200), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    # 新增排期策略字段
+    schedule_strategy = Column(String(50), nullable=True)  # 'manual'或'automated'
+    schedule_interval = Column(Integer, nullable=True)  # 自动排期间隔天数
+    is_recurring = Column(Boolean, default=False)  # 是否周期性随访
+
 
     @hybrid_property
     def follow_up_date_utc(self):

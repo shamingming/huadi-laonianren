@@ -13,13 +13,13 @@
 
         <el-table-column label="老人姓名">
           <template #default="{ row }">
-            {{ row.elderly?.name || '未知' }}
+            {{ row.elderly.name }}
           </template>
         </el-table-column>
 
         <el-table-column label="医生">
           <template #default="{ row }">
-            {{ row.doctor?.name || '未知' }}
+            {{ row.doctor.name }}
           </template>
         </el-table-column>
         <el-table-column prop="follow_up_date" label="随访日期" width="180">
@@ -68,7 +68,22 @@
           value-format="YYYY-MM-DD HH:mm:ss"
         />
       </el-form-item>
-        <el-form-item label="随访内容">
+      <el-form-item label="排期策略">
+        <el-radio-group v-model="formData.schedule_strategy">
+          <el-radio label="manual">手动指定</el-radio>
+          <el-radio label="automated">自动排期</el-radio>
+        </el-radio-group>
+      </el-form-item>
+
+      <el-form-item label="下次随访时间" v-if="formData.schedule_strategy === 'manual'">
+        <el-date-picker v-model="formData.next_follow_up_date" type="datetime"/>
+      </el-form-item>
+
+      <el-form-item label="自动排期间隔" v-if="formData.schedule_strategy === 'automated'">
+        <el-input-number v-model="formData.schedule_interval" :min="1" :max="365"/>
+        <span style="margin-left:10px">天</span>
+      </el-form-item>
+      <el-form-item label="随访内容">
           <el-input v-model="formData.content" type="textarea" rows="4" />
         </el-form-item>
         <el-form-item label="随访结果">
@@ -85,10 +100,9 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { getFollowUps, createFollowUp, deleteFollowUp, getElderlies, getDoctors,generateReport } from '@/api/followUp'
+import { getFollowUps, createFollowUp, deleteFollowUp, getElderlies, getDoctors, generateReport } from '@/api/followUp'
 import { formatDate } from '@/utils/date'
 import { ElMessage } from 'element-plus'
-
 
 const followUps = ref([])
 const doctors = ref([])
@@ -105,7 +119,8 @@ const formData = ref({
 onMounted(async () => {
   try {
     await fetchFollowUps()
-    console.log('followUps value:', JSON.stringify(followUps.value, null, 2))  // 添加调试信息
+    // 添加调试日志：打印完整的随访数据
+    console.log('[DEBUG] 随访数据:', JSON.stringify(followUps.value, null, 2))
     await fetchDoctors()
     await fetchElderlies()
   } catch (error) {
@@ -113,18 +128,59 @@ onMounted(async () => {
   }
 })
 
-
-
 const fetchFollowUps = async () => {
   try {
     const res = await getFollowUps()
-    console.log('fetchFollowUps response data:', JSON.stringify(res.data, null, 2))  // 添加调试信息
-    followUps.value = res.data
+    console.log('[DEBUG] 原始API响应数据:', JSON.stringify(res.data, null, 2))
+
+    followUps.value = res.data.map(item => {
+      // 处理老人信息（核心修改）
+      let elderlyInfo = item.elderly || {};
+      // 若老人信息存在但姓名为空，显示"未知老人"
+      if (elderlyInfo && !elderlyInfo.name) {
+        elderlyInfo.name = "未知老人";
+        console.warn(`随访记录 ${item.id} 的老人姓名为空`);
+      }
+      // 若老人信息完全缺失（关联失败），显示"无关联老人"
+      if (!item.elderly) {
+        elderlyInfo = {
+          id: item.elderly_id || 0,
+          name: "无关联老人",
+          gender: "",
+          age: 0
+        };
+        console.warn(`随访记录 ${item.id} 缺失老人关联数据`);
+      }
+
+      // 处理医生信息（核心修改）
+      let doctorInfo = item.doctor || {};
+      // 若医生信息存在但姓名为空，显示"未知医生"
+      if (doctorInfo && !doctorInfo.name) {
+        doctorInfo.name = "未知医生";
+        console.warn(`随访记录 ${item.id} 的医生姓名为空`);
+      }
+      // 若医生信息完全缺失（关联失败），显示"无关联医生"
+      if (!item.doctor) {
+        doctorInfo = {
+          id: item.doctor_id || 0,
+          name: "无关联医生",
+          department: ""
+        };
+        console.warn(`随访记录 ${item.id} 缺失医生关联数据`);
+      }
+
+      return {
+        ...item,
+        elderly: elderlyInfo,
+        doctor: doctorInfo
+      };
+    });
   } catch (error) {
     ElMessage.error('获取随访记录失败')
-    console.error(error)
+    console.error('获取随访记录失败详情:', error)
   }
 }
+
 
 
 
@@ -147,16 +203,21 @@ const fetchElderlies = async () => {
   }
 }
 
+// ListView.vue 的showCreateDialog方法
 const showCreateDialog = () => {
   formData.value = {
     elderly_id: '',
     doctor_id: '',
     follow_up_date: '',
     content: '',
-    result: ''
+    result: '',
+    schedule_strategy: 'manual', // 默认手动
+    schedule_interval: 30, // 默认30天
+    is_recurring: false
   }
   dialogVisible.value = true
 }
+
 
 const submitForm = async () => {
   try {
@@ -171,7 +232,13 @@ const submitForm = async () => {
       doctor_id: Number(formData.value.doctor_id),
       follow_up_date: formData.value.follow_up_date,
       content: formData.value.content || '',
-      result: formData.value.result || ''
+      result: formData.value.result || '',
+      schedule_strategy: formData.value.schedule_strategy,
+      schedule_interval: formData.value.schedule_interval,
+      is_recurring: formData.value.is_recurring,
+      next_follow_up_date: formData.value.schedule_strategy === 'manual'
+        ? formData.value.next_follow_up_date
+        : null
     }
 
     console.log('提交数据:', payload) // 调试用

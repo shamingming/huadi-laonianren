@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone,timedelta
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 from fastapi import HTTPException, status
@@ -37,6 +37,7 @@ def get_follow_up(db: Session, follow_up_id: int):
 
 
 
+# crud.py 的get_follow_ups方法
 def get_follow_ups(db: Session, skip: int = 0, limit: int = 100, elderly_id: int = None, doctor_id: int = None):
     try:
         query = db.query(models.FollowUp).options(
@@ -44,20 +45,15 @@ def get_follow_ups(db: Session, skip: int = 0, limit: int = 100, elderly_id: int
             joinedload(models.FollowUp.doctor)
         )
 
-        if elderly_id:
+        if elderly_id is not None:
             query = query.filter(models.FollowUp.elderly_id == elderly_id)
-        if doctor_id:
+        if doctor_id is not None:
             query = query.filter(models.FollowUp.doctor_id == doctor_id)
 
-        results = query.order_by(models.FollowUp.follow_up_date.desc()).offset(skip).limit(limit).all()
-        print("Query Results:", results)  # 添加调试信息
-        return results
+        return query.order_by(models.FollowUp.follow_up_date.desc()).offset(skip).limit(limit).all()
     except SQLAlchemyError as e:
-        logger.error(f"获取随访列表失败, 错误: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="获取随访列表失败"
-        )
+        logger.error(f"获取随访列表失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="获取随访数据失败")
 
 
 
@@ -68,12 +64,19 @@ def create_follow_up(db: Session, follow_up: schemas.FollowUpCreate):
         if isinstance(follow_up_date, str):
             follow_up_date = datetime.strptime(follow_up_date, "%Y-%m-%d %H:%M:%S")
 
+        # 处理自动排期逻辑
+        if follow_up.schedule_strategy == 'automated' and follow_up.schedule_interval:
+            follow_up.next_follow_up_date = follow_up.follow_up_date + timedelta(days=follow_up.schedule_interval)
+
         db_follow_up = models.FollowUp(
             elderly_id=follow_up.elderly_id,
             doctor_id=follow_up.doctor_id,
             follow_up_date=follow_up_date,
             content=follow_up.content,
-            result=follow_up.result
+            result=follow_up.result,
+            schedule_strategy=follow_up.schedule_strategy or "manual",  # 默认值
+            schedule_interval=follow_up.schedule_interval,
+            is_recurring=follow_up.is_recurring or False
         )
 
         db.add(db_follow_up)
@@ -279,3 +282,39 @@ def get_elderlies(db: Session, skip: int = 0, limit: int = 100):
 
 def get_doctors(db: Session, skip: int = 0, limit: int = 100):
     return db.query(models.Doctor).offset(skip).limit(limit).all()
+
+
+def schedule_follow_up_automation(db: Session):
+    """自动为需要随访的老人生成随访计划"""
+    try:
+        # 1. 获取所有需要随访的老人（例如：上次随访超过30天的老人）
+        elderly_list = db.query(models.Elderly).all()
+
+        for elderly in elderly_list:
+            last_follow_up = db.query(models.FollowUp) \
+                .filter(models.FollowUp.elderly_id == elderly.id) \
+                .order_by(models.FollowUp.follow_up_date.desc()) \
+                .first()
+
+            # 2. 判断是否需要新随访（示例：超过30天未随访）
+            if last_follow_up:
+                days_since_last = (datetime.now() - last_follow_up.follow_up_date).days
+                if days_since_last < 30:
+                    continue
+
+            # 3. 自动创建随访记录
+            new_follow_up = models.FollowUp(
+                elderly_id=elderly.id,
+                doctor_id=1,  # 默认分配ID为1的医生
+                follow_up_date=datetime.now() + timedelta(days=1),  # 默认明天
+                content="系统自动生成的随访计划",
+                result="待填写"
+            )
+            db.add(new_follow_up)
+            db.commit()
+
+            print(f"已为老人 {elderly.name} 创建随访计划")
+
+    except Exception as e:
+        db.rollback()
+        logger.error(f"自动排期失败: {str(e)}")

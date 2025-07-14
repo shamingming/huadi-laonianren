@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status, BackgroundTasks
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -7,6 +7,7 @@ from datetime import datetime,timezone
 from pydantic import BaseModel, validator
 
 from .. import schemas, crud
+from ..crud import schedule_follow_up_automation
 from ..database import SessionLocal
 from pathlib import Path
 
@@ -252,3 +253,18 @@ async def delete_follow_up(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="删除随访记录失败"
         )
+
+
+@router.post(
+    "/follow-ups/schedule",
+    summary="手动触发随访排期",
+    description="立即执行自动化随访排期任务（通常由系统定时调用）",
+    status_code=202
+)
+async def trigger_follow_up_scheduling(
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    """供外部调用的排期接口"""
+    background_tasks.add_task(schedule_follow_up_automation, db)
+    return {"message": "随访排期任务已提交后台执行"}

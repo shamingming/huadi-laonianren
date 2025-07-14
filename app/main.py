@@ -1,14 +1,20 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, BackgroundTasks
+
+from app import models
+from app.routers.follow_up import trigger_follow_up_scheduling
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import inspect
 import os
 from pathlib import Path
+from app.crud import schedule_follow_up_automation
 from fastapi.middleware.cors import CORSMiddleware
-
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
+from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 
-from app.database import Base, engine
+from app.database import Base, engine, SessionLocal
 from app.routers import follow_up
 import logging
 
@@ -40,17 +46,64 @@ app = FastAPI()
 # 创建静态文件目录（如果不存在）
 static_dir = Path("static")
 os.makedirs(static_dir, exist_ok=True)
+# 在main.py中添加（临时使用）
 
 
+# 在 lifespan 中初始化调度器
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # 初始化数据库
     with engine.connect() as connection:
         inspector = inspect(connection)
         if not inspector.has_table("elderly"):
             Base.metadata.create_all(bind=engine)
-    yield
-    # 关闭时可以添加清理逻辑
 
+    # 初始化 APScheduler
+    scheduler = AsyncIOScheduler()
+    scheduler.start()
+
+    # 添加测试任务（每分钟执行一次）
+    scheduler.add_job(
+        test_scheduled_task,
+        CronTrigger(second="*/10"),  # 每10秒触发一次（测试用）
+        id="test_task"
+    )
+
+    # 添加随访排期任务（每天上午9点执行）
+    scheduler.add_job(
+        schedule_follow_ups,
+        CronTrigger(hour=9, minute=0),  # 每天9:00 AM
+        id="follow_up_scheduler"
+    )
+
+    yield
+
+    # 关闭时清理调度器
+    scheduler.shutdown()
+
+# 测试任务
+def test_scheduled_task():
+    print(f"定时任务测试: {datetime.now()}")
+
+# 随访排期任务（需实现具体逻辑）
+def schedule_follow_ups():
+    with SessionLocal() as db:
+        # 只处理自动排期的随访
+        recurring_follows = db.query(models.FollowUp).filter(
+            models.FollowUp.is_recurring == True,
+            models.FollowUp.next_follow_up_date <= datetime.now()
+        ).all()
+
+        for follow in recurring_follows:
+            new_follow = models.FollowUp(
+                elderly_id=follow.elderly_id,
+                doctor_id=follow.doctor_id,
+                follow_up_date=follow.next_follow_up_date,
+                next_follow_up_date=follow.next_follow_up_date + timedelta(days=follow.schedule_interval),
+                # ...复制其他必要字段
+            )
+            db.add(new_follow)
+        db.commit()
 
 app = FastAPI(
     title="老年人健康管理平台",
@@ -97,3 +150,9 @@ def debug_db_config(db: Session = Depends(get_db)):
         "db_url": str(db.bind.url),  # 显示实际连接字符串
         "pool_size": db.bind.pool.size()
     }
+
+@app.get("/migrate")
+def migrate_db():
+    Base.metadata.drop_all(bind=engine)  # 删除旧表
+    Base.metadata.create_all(bind=engine)  # 创建新表
+    return {"message": "数据库表结构已更新"}
