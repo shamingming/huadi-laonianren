@@ -27,6 +27,11 @@
             {{ formatDate(row.follow_up_date) }}
           </template>
         </el-table-column>
+        <el-table-column label="下次随访日期" width="180">
+          <template #default="{ row }">
+            {{ row.next_follow_up_date ? formatDate(row.next_follow_up_date) : '无' }}
+          </template>
+        </el-table-column>
         <el-table-column prop="content" label="随访内容" />
         <el-table-column label="操作" width="180">
           <template #default="{ row }">
@@ -39,55 +44,58 @@
 
     <!-- 新增对话框 -->
     <el-dialog v-model="dialogVisible" title="新增随访记录">
-    <el-form :model="formData" label-width="120px">
-      <el-form-item label="老人" required>
-        <el-select v-model="formData.elderly_id" placeholder="请选择老人" clearable>
-          <el-option
-            v-for="elderly in elderlies"
-            :key="elderly.id"
-            :label="elderly.name"
-            :value="elderly.id"
+      <el-form :model="formData" label-width="120px">
+        <el-form-item label="老人" required>
+          <el-select v-model="formData.elderly_id" placeholder="请选择老人" clearable>
+            <el-option
+              v-for="elderly in elderlies"
+              :key="elderly.id"
+              :label="elderly.name"
+              :value="elderly.id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="医生" required>
+          <el-select v-model="formData.doctor_id" placeholder="请选择医生" clearable>
+            <el-option
+              v-for="doctor in doctors"
+              :key="doctor.id"
+              :label="doctor.name"
+              :value="doctor.id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="随访日期" required>
+          <el-date-picker
+            v-model="formData.follow_up_date"
+            type="datetime"
+            placeholder="选择日期时间"
+            value-format="YYYY-MM-DD HH:mm:ss"
           />
-        </el-select>
-      </el-form-item>
-      <el-form-item label="医生" required>
-        <el-select v-model="formData.doctor_id" placeholder="请选择医生" clearable>
-          <el-option
-            v-for="doctor in doctors"
-            :key="doctor.id"
-            :label="doctor.name"
-            :value="doctor.id"
-          />
-        </el-select>
-      </el-form-item>
-      <el-form-item label="随访日期" required>
-        <el-date-picker
-          v-model="formData.follow_up_date"
-          type="datetime"
-          placeholder="选择日期时间"
-          value-format="YYYY-MM-DD HH:mm:ss"
-        />
-      </el-form-item>
-      <el-form-item label="排期策略">
-        <el-radio-group v-model="formData.schedule_strategy">
-          <el-radio label="manual">手动指定</el-radio>
-          <el-radio label="automated">自动排期</el-radio>
-        </el-radio-group>
-      </el-form-item>
+        </el-form-item>
+        <el-form-item label="排期策略">
+          <el-radio-group v-model="formData.schedule_strategy">
+            <el-radio label="manual">手动指定</el-radio>
+            <el-radio label="automated">自动排期</el-radio>
+          </el-radio-group>
+        </el-form-item>
 
-      <el-form-item label="下次随访时间" v-if="formData.schedule_strategy === 'manual'">
-        <el-date-picker v-model="formData.next_follow_up_date" type="datetime"/>
-      </el-form-item>
+        <el-form-item label="下次随访时间" v-if="formData.schedule_strategy === 'manual'">
+          <el-date-picker v-model="formData.next_follow_up_date" type="datetime" />
+        </el-form-item>
 
-      <el-form-item label="自动排期间隔" v-if="formData.schedule_strategy === 'automated'">
-        <el-input-number v-model="formData.schedule_interval" :min="1" :max="365"/>
-        <span style="margin-left:10px">天</span>
-      </el-form-item>
-      <el-form-item label="随访内容">
+        <el-form-item label="自动排期间隔" v-if="formData.schedule_strategy === 'automated'">
+          <el-input-number v-model="formData.schedule_interval" :min="1" :max="365" />
+          <span style="margin-left:10px">天</span>
+        </el-form-item>
+        <el-form-item label="随访内容">
           <el-input v-model="formData.content" type="textarea" rows="4" />
         </el-form-item>
         <el-form-item label="随访结果">
           <el-input v-model="formData.result" type="textarea" rows="4" />
+        </el-form-item>
+        <el-form-item label="用药禁忌">
+          <el-input v-model="formData.medication_warning" type="textarea" rows="2" placeholder="请输入老人的用药禁忌或注意事项" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -104,6 +112,7 @@ import { getFollowUps, createFollowUp, deleteFollowUp, getElderlies, getDoctors,
 import { formatDate } from '@/utils/date'
 import { ElMessage } from 'element-plus'
 
+
 const followUps = ref([])
 const doctors = ref([])
 const elderlies = ref([])
@@ -113,7 +122,11 @@ const formData = ref({
   doctor_id: '',
   follow_up_date: '',
   content: '',
-  result: ''
+  result: '',
+  schedule_strategy: 'manual', // 默认手动
+  schedule_interval: 30, // 默认30天
+  is_recurring: false,
+  medication_warning: '' // 新增用药禁忌字段
 })
 
 onMounted(async () => {
@@ -168,11 +181,35 @@ const fetchFollowUps = async () => {
         };
         console.warn(`随访记录 ${item.id} 缺失医生关联数据`);
       }
+      // 输出 next_follow_up_date 进行调试
+      console.log(`随访记录 ${item.id} 的 next_follow_up_date:`, item.next_follow_up_date);
 
+      // 确保 next_follow_up_date 是 Date 对象或 null
+      let nextDate = null
+      if (item.next_follow_up_date) {
+        try {
+          // 如果已经是Date对象则直接使用
+          if (item.next_follow_up_date instanceof Date) {
+            nextDate = item.next_follow_up_date
+          }
+          // 如果是字符串则转换为Date对象
+          else if (typeof item.next_follow_up_date === 'string') {
+            nextDate = new Date(item.next_follow_up_date)
+            if (isNaN(nextDate.getTime())) {
+              console.warn(`无效的日期格式: ${item.next_follow_up_date}`)
+              nextDate = null
+            }
+          }
+        } catch (e) {
+          console.error('日期转换错误:', e)
+          nextDate = null
+        }
+      }
       return {
         ...item,
         elderly: elderlyInfo,
-        doctor: doctorInfo
+        doctor: doctorInfo,
+        next_follow_up_date: item.next_follow_up_date || null
       };
     });
   } catch (error) {
@@ -180,10 +217,6 @@ const fetchFollowUps = async () => {
     console.error('获取随访记录失败详情:', error)
   }
 }
-
-
-
-
 
 const fetchDoctors = async () => {
   try {
@@ -213,11 +246,11 @@ const showCreateDialog = () => {
     result: '',
     schedule_strategy: 'manual', // 默认手动
     schedule_interval: 30, // 默认30天
-    is_recurring: false
+    is_recurring: false,
+    medication_warning: '' // 新增用药禁忌字段
   }
   dialogVisible.value = true
 }
-
 
 const submitForm = async () => {
   try {
@@ -236,9 +269,12 @@ const submitForm = async () => {
       schedule_strategy: formData.value.schedule_strategy,
       schedule_interval: formData.value.schedule_interval,
       is_recurring: formData.value.is_recurring,
+      medication_warning: formData.value.medication_warning || '',
       next_follow_up_date: formData.value.schedule_strategy === 'manual'
         ? formData.value.next_follow_up_date
-        : null
+        : (formData.value.schedule_strategy === 'automated'
+          ? new Date(new Date(formData.value.follow_up_date).getTime() + formData.value.schedule_interval * 86400000).toISOString()
+          : null)
     }
 
     console.log('提交数据:', payload) // 调试用
@@ -289,8 +325,6 @@ const viewReport = async (id) => {
   }
 }
 
-
-
 const handleDelete = async (id) => {
   try {
     await deleteFollowUp(id)
@@ -301,13 +335,13 @@ const handleDelete = async (id) => {
     ElMessage.error(`删除失败: ${error.response?.data?.detail || error.message}`)
   }
 }
-
 </script>
 
 <style scoped>
 .follow-up-container {
   padding: 20px;
 }
+
 .card-header {
   display: flex;
   justify-content: space-between;

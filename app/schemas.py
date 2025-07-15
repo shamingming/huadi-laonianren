@@ -31,20 +31,11 @@ class FollowUpCreate(BaseModel):
         None,
         max_length=200,
         description="药物禁忌信息"
-    ),
+    )
     # 新增以下字段
     schedule_strategy: Optional[str] = "manual"  # 默认手动
     schedule_interval: Optional[int] = None
     is_recurring: Optional[bool] = False
-
-    @validator('follow_up_date')
-    def validate_date(cls, v):
-        try:
-            if 'Z' not in v and '+' not in v:
-                v += 'Z'
-            return datetime.fromisoformat(v.replace('Z', '+00:00'))
-        except ValueError as e:
-            raise ValueError(f"日期格式无效: {e}")
 
     @validator('follow_up_date')
     def validate_date(cls, v):
@@ -67,6 +58,7 @@ class FollowUpReport(BaseModel):
         None,
         description="下次随访日期"
     )
+    medication_warning: Optional[str] = Field(None, description="用药禁忌")
 
 
 class ElderlyBase(BaseModel):
@@ -106,6 +98,7 @@ class FollowUp(BaseModel):
     follow_up_date: datetime
     content: Optional[str]
     result: Optional[str]
+    next_follow_up_date: Optional[datetime]
     # 包含完整的关联对象
     elderly: 'Elderly'  # 使用字符串引用来避免循环引用
     doctor: 'Doctor'

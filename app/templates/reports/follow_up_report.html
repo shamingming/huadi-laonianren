@@ -61,6 +61,11 @@
         <p>{{ report.result }}</p>
     </div>
 
+    <div class="section">
+        <h3>用药禁忌</h3>
+        <p>{{ report.medication_warning }}</p>
+    </div>
+
     {% if report.next_follow_up_date %}
     <div class="report-section">
         <div class="section-title">下次随访时间</div>

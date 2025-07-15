@@ -56,7 +56,6 @@ def get_follow_ups(db: Session, skip: int = 0, limit: int = 100, elderly_id: int
         raise HTTPException(status_code=500, detail="获取随访数据失败")
 
 
-
 def create_follow_up(db: Session, follow_up: schemas.FollowUpCreate):
     try:
         # 确保follow_up_date是datetime对象
@@ -64,9 +63,15 @@ def create_follow_up(db: Session, follow_up: schemas.FollowUpCreate):
         if isinstance(follow_up_date, str):
             follow_up_date = datetime.strptime(follow_up_date, "%Y-%m-%d %H:%M:%S")
 
-        # 处理自动排期逻辑
+        # 计算自动排期的下次随访日期
+        next_follow_up_date = None
         if follow_up.schedule_strategy == 'automated' and follow_up.schedule_interval:
-            follow_up.next_follow_up_date = follow_up.follow_up_date + timedelta(days=follow_up.schedule_interval)
+            next_follow_up_date = follow_up_date + timedelta(days=follow_up.schedule_interval)
+        elif follow_up.schedule_strategy == 'manual' and follow_up.next_follow_up_date:
+            next_follow_up_date = follow_up.next_follow_up_date
+            if isinstance(next_follow_up_date, str):
+                next_follow_up_date = datetime.strptime(next_follow_up_date, "%Y-%m-%d %H:%M:%S")
+
 
         db_follow_up = models.FollowUp(
             elderly_id=follow_up.elderly_id,
@@ -74,6 +79,8 @@ def create_follow_up(db: Session, follow_up: schemas.FollowUpCreate):
             follow_up_date=follow_up_date,
             content=follow_up.content,
             result=follow_up.result,
+            next_follow_up_date=next_follow_up_date,  # 存储下次随访日期
+            medication_warning=follow_up.medication_warning,  # 存储用药禁忌
             schedule_strategy=follow_up.schedule_strategy or "manual",  # 默认值
             schedule_interval=follow_up.schedule_interval,
             is_recurring=follow_up.is_recurring or False
@@ -109,7 +116,8 @@ def get_follow_up_report_data(db: Session, follow_up_id: int):
             "content": follow_up.content or "",
             "result": follow_up.result or "",
             "next_follow_up_date": follow_up.next_follow_up_date.strftime("%Y-%m-%d %H:%M")
-            if follow_up.next_follow_up_date else None
+            if follow_up.next_follow_up_date else None,
+            "medication_warning": follow_up.medication_warning or "无特殊用药禁忌"
         }
     except SQLAlchemyError as e:
         logger.error(f"生成报告数据失败 ID:{follow_up_id}, 错误: {str(e)}")
