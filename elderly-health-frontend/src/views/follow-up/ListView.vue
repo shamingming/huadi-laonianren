@@ -1,14 +1,48 @@
 <template>
-  <div class="follow-up-container">
-    <el-card>
+  <div style="background-color: #f4f7fa; padding: 20px;">
+    <el-card style="border-radius: 8px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);">
       <template #header>
-        <div class="card-header">
+        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; color: #0066cc;">
           <span>随访记录管理</span>
-          <el-button type="primary" @click="showCreateDialog">新增随访</el-button>
+          <el-button type="primary" style="background-color: #0066cc; border-color: #0066cc; border-radius: 4px;" @click="showCreateDialog">新增随访</el-button>
         </div>
       </template>
+      <div class="search-container" style="margin-bottom: 20px; display: flex; flex-wrap: wrap; gap: 10px;">
+    <!-- 老人姓名搜索 -->
+    <el-input
+      v-model="searchParams.elderlyName"
+      placeholder="老人姓名"
+      clearable      style="width: 200px"
+    />
 
-      <el-table :data="followUps" border style="width: 100%">
+    <!-- 医生姓名搜索 -->
+    <el-input
+      v-model="searchParams.doctorName"
+      placeholder="医生姓名"
+      clearable      style="width: 200px"
+    />
+
+    <!-- 日期范围选择 -->
+    <el-date-picker
+      v-model="searchParams.dateRange"
+      type="daterange"
+      range-separator="至"
+      start-placeholder="开始日期"
+      end-placeholder="结束日期"      style="width: 350px"
+    />
+
+    <el-button
+      type="primary"
+      @click="handleSearch"
+      :loading="searchLoading"
+    >
+      搜索
+    </el-button>
+
+    <el-button @click="resetSearch">重置</el-button>
+  </div>
+
+      <el-table :data="followUps" border style="width: 100%; background-color: #fff; border-radius: 8px;">
         <el-table-column prop="id" label="ID" width="80" />
 
         <el-table-column label="老人姓名">
@@ -27,26 +61,24 @@
             {{ formatDate(row.follow_up_date) }}
           </template>
         </el-table-column>
-        <el-table-column label="下次随访日期" width="180">
-          <template #default="{ row }">
-            {{ row.next_follow_up_date ? formatDate(row.next_follow_up_date) : '无' }}
-          </template>
-        </el-table-column>
         <el-table-column prop="content" label="随访内容" />
-        <el-table-column label="操作" width="180">
+        <el-table-column label="操作" width="220">
           <template #default="{ row }">
-            <el-button size="small" @click="viewReport(row.id)">查看报告</el-button>
-            <el-button size="small" type="danger" @click="handleDelete(row.id)">删除</el-button>
+            <el-button size="small" style="background-color: #0066cc; border-color: #0066cc; border-radius: 4px;" @click="handleEdit(row)">编辑</el-button>
+            <el-button size="small" style="background-color: #0066cc; border-color: #0066cc; border-radius: 4px;" @click="viewReport(row.id)">查看报告</el-button>
+            <el-button size="small" type="danger" style="border-radius: 4px;" @click="handleDelete(row.id)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
     </el-card>
 
+    <EditDialog ref="editDialog" type="follow-up" @updated="handleUpdated" />
+
     <!-- 新增对话框 -->
-    <el-dialog v-model="dialogVisible" title="新增随访记录">
+    <el-dialog v-model="dialogVisible" title="新增随访记录" style="border-radius: 8px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);">
       <el-form :model="formData" label-width="120px">
         <el-form-item label="老人" required>
-          <el-select v-model="formData.elderly_id" placeholder="请选择老人" clearable>
+          <el-select v-model="formData.elderly_id" placeholder="请选择老人" clearable style="border-radius: 4px; border: 1px solid #ccc;">
             <el-option
               v-for="elderly in elderlies"
               :key="elderly.id"
@@ -56,7 +88,7 @@
           </el-select>
         </el-form-item>
         <el-form-item label="医生" required>
-          <el-select v-model="formData.doctor_id" placeholder="请选择医生" clearable>
+          <el-select v-model="formData.doctor_id" placeholder="请选择医生" clearable style="border-radius: 4px; border: 1px solid #ccc;">
             <el-option
               v-for="doctor in doctors"
               :key="doctor.id"
@@ -71,6 +103,7 @@
             type="datetime"
             placeholder="选择日期时间"
             value-format="YYYY-MM-DD HH:mm:ss"
+            style="border-radius: 4px; border: 1px solid #ccc;"
           />
         </el-form-item>
         <el-form-item label="排期策略">
@@ -81,38 +114,50 @@
         </el-form-item>
 
         <el-form-item label="下次随访时间" v-if="formData.schedule_strategy === 'manual'">
-          <el-date-picker v-model="formData.next_follow_up_date" type="datetime" />
+          <el-date-picker v-model="formData.next_follow_up_date" type="datetime" style="border-radius: 4px; border: 1px solid #ccc;" />
         </el-form-item>
 
         <el-form-item label="自动排期间隔" v-if="formData.schedule_strategy === 'automated'">
-          <el-input-number v-model="formData.schedule_interval" :min="1" :max="365" />
+          <el-input-number v-model="formData.schedule_interval" :min="1" :max="365" style="border-radius: 4px; border: 1px solid #ccc;" />
           <span style="margin-left:10px">天</span>
         </el-form-item>
         <el-form-item label="随访内容">
-          <el-input v-model="formData.content" type="textarea" rows="4" />
-        </el-form-item>
-        <el-form-item label="随访结果">
-          <el-input v-model="formData.result" type="textarea" rows="4" />
+          <el-input v-model="formData.content" type="textarea" rows="4" style="border-radius: 4px; border: 1px solid #ccc;"></el-input>
         </el-form-item>
         <el-form-item label="用药禁忌">
-          <el-input v-model="formData.medication_warning" type="textarea" rows="2" placeholder="请输入老人的用药禁忌或注意事项" />
+          <el-input v-model="formData.medication_warning" type="textarea" rows="2" placeholder="请输入老人的用药禁忌或注意事项" style="border-radius: 4px; border: 1px solid #ccc;"></el-input>
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="submitForm">提交</el-button>
+        <el-button @click="dialogVisible = false" style="border-radius: 4px;">取消</el-button>
+        <el-button type="primary" style="background-color: #0066cc; border-color: #0066cc; border-radius: 4px;" @click="submitForm">提交</el-button>
       </template>
     </el-dialog>
   </div>
+   <el-pagination
+    v-model:current-page="pagination.page"
+    v-model:page-size="pagination.per_page"
+    :page-sizes="[10, 20, 50, 100]"
+    :total="pagination.total"
+    layout="total, sizes, prev, pager, next, jumper"
+    @size-change="handleSizeChange"
+    @current-change="handleCurrentChange"    style="margin-top: 20px; justify-content: flex-end;"
+  />
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { getFollowUps, createFollowUp, deleteFollowUp, getElderlies, getDoctors, generateReport } from '@/api/followUp'
 import { formatDate } from '@/utils/date'
 import { ElMessage } from 'element-plus'
-
-
+import EditDialog from './EditDialog.vue'
+import { formatDateToBackend } from '@/utils/date'
+// 分页状态
+const pagination = reactive({
+  page: 1,
+  per_page: 20,
+  total: 0
+})
 const followUps = ref([])
 const doctors = ref([])
 const elderlies = ref([])
@@ -122,7 +167,6 @@ const formData = ref({
   doctor_id: '',
   follow_up_date: '',
   content: '',
-  result: '',
   schedule_strategy: 'manual', // 默认手动
   schedule_interval: 30, // 默认30天
   is_recurring: false,
@@ -131,9 +175,12 @@ const formData = ref({
 
 onMounted(async () => {
   try {
-    await fetchFollowUps()
+    await fetchFollowUpsWithSearch()
     // 添加调试日志：打印完整的随访数据
-    console.log('[DEBUG] 随访数据:', JSON.stringify(followUps.value, null, 2))
+    console.log('随访数据加载完成:', {
+          items: followUps.value,
+          pagination: {...pagination}
+        })
     await fetchDoctors()
     await fetchElderlies()
   } catch (error) {
@@ -141,82 +188,140 @@ onMounted(async () => {
   }
 })
 
-const fetchFollowUps = async () => {
+// 搜索参数
+const searchParams = reactive({
+  elderlyName: '',
+  doctorName: '',
+  dateRange: []
+})
+// 在 ListView.vue 中添加方法将姓名转换为ID
+const getElderlyIdByName = async (name) => {
+  const res = await getElderlies({ name })
+  return res.data[0]?.id
+}
+
+const getDoctorIdByName = async (name) => {
+  const res = await getDoctors({ name })
+  return res.data[0]?.id
+}
+const searchLoading = ref(false)
+// 搜索方法
+// 修改 ListView.vue 中的 handleSearch 方法
+// 修改后的 handleSearch 方法
+const handleSearch = async () => {
+  searchLoading.value = true
   try {
-    const res = await getFollowUps()
-    console.log('[DEBUG] 原始API响应数据:', JSON.stringify(res.data, null, 2))
-
-    followUps.value = res.data.map(item => {
-      // 处理老人信息（核心修改）
-      let elderlyInfo = item.elderly || {};
-      // 若老人信息存在但姓名为空，显示"未知老人"
-      if (elderlyInfo && !elderlyInfo.name) {
-        elderlyInfo.name = "未知老人";
-        console.warn(`随访记录 ${item.id} 的老人姓名为空`);
-      }
-      // 若老人信息完全缺失（关联失败），显示"无关联老人"
-      if (!item.elderly) {
-        elderlyInfo = {
-          id: item.elderly_id || 0,
-          name: "无关联老人",
-          gender: "",
-          age: 0
-        };
-        console.warn(`随访记录 ${item.id} 缺失老人关联数据`);
-      }
-
-      // 处理医生信息（核心修改）
-      let doctorInfo = item.doctor || {};
-      // 若医生信息存在但姓名为空，显示"未知医生"
-      if (doctorInfo && !doctorInfo.name) {
-        doctorInfo.name = "未知医生";
-        console.warn(`随访记录 ${item.id} 的医生姓名为空`);
-      }
-      // 若医生信息完全缺失（关联失败），显示"无关联医生"
-      if (!item.doctor) {
-        doctorInfo = {
-          id: item.doctor_id || 0,
-          name: "无关联医生",
-          department: ""
-        };
-        console.warn(`随访记录 ${item.id} 缺失医生关联数据`);
-      }
-      // 输出 next_follow_up_date 进行调试
-      console.log(`随访记录 ${item.id} 的 next_follow_up_date:`, item.next_follow_up_date);
-
-      // 确保 next_follow_up_date 是 Date 对象或 null
-      let nextDate = null
-      if (item.next_follow_up_date) {
-        try {
-          // 如果已经是Date对象则直接使用
-          if (item.next_follow_up_date instanceof Date) {
-            nextDate = item.next_follow_up_date
-          }
-          // 如果是字符串则转换为Date对象
-          else if (typeof item.next_follow_up_date === 'string') {
-            nextDate = new Date(item.next_follow_up_date)
-            if (isNaN(nextDate.getTime())) {
-              console.warn(`无效的日期格式: ${item.next_follow_up_date}`)
-              nextDate = null
-            }
-          }
-        } catch (e) {
-          console.error('日期转换错误:', e)
-          nextDate = null
-        }
-      }
-      return {
-        ...item,
-        elderly: elderlyInfo,
-        doctor: doctorInfo,
-        next_follow_up_date: item.next_follow_up_date || null
-      };
-    });
+    // 重置到第一页
+    pagination.page = 1
+    await fetchFollowUpsWithSearch()
   } catch (error) {
-    ElMessage.error('获取随访记录失败')
-    console.error('获取随访记录失败详情:', error)
+    console.error('搜索失败:', error)
+    ElMessage.error('搜索失败: ' + (error.response?.data?.detail || error.message))
+  } finally {
+    searchLoading.value = false
   }
 }
+
+
+// 页面加载时获取医生数据
+onMounted(async () => {
+  try {
+    // 调用获取医生列表的接口
+    const res = await getDoctors()
+    // 检查接口返回格式是否正确
+    if (res && Array.isArray(res.data)) {
+      doctors.value = res.data
+      console.log('[DEBUG] 医生数据加载成功:', doctors.value)
+    } else {
+      doctors.value = []
+      console.warn('[WARNING] 医生数据格式不正确:', res)
+    }
+  } catch (error) {
+    console.error('[ERROR] 获取医生列表失败:', error)
+    ElMessage.error('加载医生列表失败，请刷新页面重试')
+  }
+})
+
+
+
+// 重置搜索
+const resetSearch = () => {
+  searchParams.elderlyName = ''
+  searchParams.doctorName = ''
+  searchParams.dateRange = []
+  handleSearch() // 重新加载数据
+}
+const fetchFollowUps = async () => {
+  try {
+    const res = await getFollowUps({
+      page: pagination.page,
+      per_page: pagination.per_page
+    })
+    console.log('API完整响应:', res) // 添加调试日志
+
+    // 处理两种可能的响应格式
+    if (res.data?.items) {
+      // 分页格式
+      followUps.value = res.data.items
+      pagination.total = res.data.total
+    } else if (Array.isArray(res.data)) {
+      // 普通数组格式
+      followUps.value = res.data
+      pagination.total = res.data.length
+    } else {
+      followUps.value = []
+      pagination.total = 0
+    }
+  } catch (error) {
+    console.error('API错误详情:', {
+      error: error,
+      response: error.response,
+      config: error.config
+    })
+    ElMessage.error('获取数据失败: ' + (error.response?.data?.detail || error.message))
+  }
+}
+
+
+
+// 分页事件处理
+// 修改分页处理方法
+const handleSizeChange = (val) => {
+  pagination.per_page = val
+  pagination.page = 1 // 重置到第一页
+  fetchFollowUpsWithSearch() // 使用带搜索条件的方法
+}
+
+const handleCurrentChange = (val) => {
+  pagination.page = val
+  fetchFollowUpsWithSearch() // 使用带搜索条件的方法
+}
+
+// 新增方法：带搜索条件的获取数据
+const fetchFollowUpsWithSearch = async () => {
+  try {
+    const params = {
+      page: pagination.page,
+      per_page: pagination.per_page,
+      elderly_name: searchParams.elderlyName,  // 携带搜索条件
+      doctor_name: searchParams.doctorName,    // 携带搜索条件
+    }
+
+    // 处理日期范围
+    if (searchParams.dateRange && searchParams.dateRange.length === 2) {
+      params.start_date = formatDateToBackend(searchParams.dateRange[0])
+      params.end_date = formatDateToBackend(searchParams.dateRange[1])
+    }
+
+    const res = await getFollowUps(params)
+    followUps.value = res.data.items
+    pagination.total = res.data.total
+  } catch (error) {
+    console.error('获取数据失败:', error)
+    ElMessage.error('获取数据失败: ' + (error.response?.data?.detail || error.message))
+  }
+}
+
 
 const fetchDoctors = async () => {
   try {
@@ -243,7 +348,6 @@ const showCreateDialog = () => {
     doctor_id: '',
     follow_up_date: '',
     content: '',
-    result: '',
     schedule_strategy: 'manual', // 默认手动
     schedule_interval: 30, // 默认30天
     is_recurring: false,
@@ -265,7 +369,6 @@ const submitForm = async () => {
       doctor_id: Number(formData.value.doctor_id),
       follow_up_date: formData.value.follow_up_date,
       content: formData.value.content || '',
-      result: formData.value.result || '',
       schedule_strategy: formData.value.schedule_strategy,
       schedule_interval: formData.value.schedule_interval,
       is_recurring: formData.value.is_recurring,
@@ -335,16 +438,16 @@ const handleDelete = async (id) => {
     ElMessage.error(`删除失败: ${error.response?.data?.detail || error.message}`)
   }
 }
+const editDialog = ref()
+
+const handleEdit = (row) => {
+  editDialog.value.open(row)
+}
+
+const handleUpdated = (updatedData) => {
+  const index = followUps.value.findIndex(item => item.id === updatedData.id)
+  if (index !== -1) {
+    followUps.value[index] = updatedData
+  }
+}
 </script>
-
-<style scoped>
-.follow-up-container {
-  padding: 20px;
-}
-
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-</style>

@@ -1,4 +1,6 @@
 from datetime import datetime, timezone,timedelta
+from typing import Optional
+
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 from fastapi import HTTPException, status
@@ -7,6 +9,7 @@ import logging
 from contextlib import contextmanager
 from sqlalchemy.orm import joinedload
 
+from .schemas import Elderly
 
 logger = logging.getLogger(__name__)
 
@@ -38,93 +41,140 @@ def get_follow_up(db: Session, follow_up_id: int):
 
 
 # crud.py 的get_follow_ups方法
-def get_follow_ups(db: Session, skip: int = 0, limit: int = 100, elderly_id: int = None, doctor_id: int = None):
+# crud.py
+# 在crud.py中的get_follow_ups_paginated方法
+def get_follow_ups_paginated(db: Session, page: int, per_page: int, elderly_id: int = None, doctor_id: int = None):
     try:
         query = db.query(models.FollowUp).options(
             joinedload(models.FollowUp.elderly),
             joinedload(models.FollowUp.doctor)
         )
 
-        if elderly_id is not None:
+        if elderly_id:
             query = query.filter(models.FollowUp.elderly_id == elderly_id)
-        if doctor_id is not None:
+        if doctor_id:
             query = query.filter(models.FollowUp.doctor_id == doctor_id)
 
-        return query.order_by(models.FollowUp.follow_up_date.desc()).offset(skip).limit(limit).all()
+        total = query.count()
+        items = query.order_by(
+            models.FollowUp.followup_date.desc()
+        ).offset((page - 1) * per_page).limit(per_page).all()
+
+        return {
+            "items": items,
+            "total": total,
+            "page": page,
+            "per_page": per_page,
+            "total_pages": (total + per_page - 1) // per_page
+        }
     except SQLAlchemyError as e:
-        logger.error(f"获取随访列表失败: {str(e)}")
-        raise HTTPException(status_code=500, detail="获取随访数据失败")
+        logger.error(f"分页查询失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="分页查询失败")
 
 
 def create_follow_up(db: Session, follow_up: schemas.FollowUpCreate):
     try:
-        # 确保follow_up_date是datetime对象
-        follow_up_date = follow_up.follow_up_date
-        if isinstance(follow_up_date, str):
-            follow_up_date = datetime.strptime(follow_up_date, "%Y-%m-%d %H:%M:%S")
+        # 转换日期格式
+        follow_up_data = follow_up.dict()
+        follow_up_data['followup_date'] = datetime.strptime(follow_up_data['follow_up_date'], "%Y-%m-%d %H:%M:%S")
 
-        # 计算自动排期的下次随访日期
-        next_follow_up_date = None
-        if follow_up.schedule_strategy == 'automated' and follow_up.schedule_interval:
-            next_follow_up_date = follow_up_date + timedelta(days=follow_up.schedule_interval)
-        elif follow_up.schedule_strategy == 'manual' and follow_up.next_follow_up_date:
-            next_follow_up_date = follow_up.next_follow_up_date
-            if isinstance(next_follow_up_date, str):
-                next_follow_up_date = datetime.strptime(next_follow_up_date, "%Y-%m-%d %H:%M:%S")
+        # 处理下次随访日期
+        if follow_up_data['next_follow_up_date']:
+            follow_up_data['next_follow_up_date'] = datetime.strptime(
+                follow_up_data['next_follow_up_date'], "%Y-%m-%d %H:%M:%S"
+            )
 
+        # 移除前端使用的字段名，使用数据库字段名
+        follow_up_data.pop('follow_up_date', None)
 
-        db_follow_up = models.FollowUp(
-            elderly_id=follow_up.elderly_id,
-            doctor_id=follow_up.doctor_id,
-            follow_up_date=follow_up_date,
-            content=follow_up.content,
-            result=follow_up.result,
-            next_follow_up_date=next_follow_up_date,  # 存储下次随访日期
-            medication_warning=follow_up.medication_warning,  # 存储用药禁忌
-            schedule_strategy=follow_up.schedule_strategy or "manual",  # 默认值
-            schedule_interval=follow_up.schedule_interval,
-            is_recurring=follow_up.is_recurring or False
-        )
-
+        # 创建随访记录
+        db_follow_up = models.FollowUp(**follow_up_data)
         db.add(db_follow_up)
         db.commit()
         db.refresh(db_follow_up)
         return db_follow_up
     except Exception as e:
         db.rollback()
-        logger.error(f"创建失败: {str(e)}")
+        logger.error(f"创建随访记录失败: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
+
 def get_follow_up_report_data(db: Session, follow_up_id: int):
-    """生成报告所需数据（增强错误处理）"""
+    """生成报告所需数据（包含所有健康指标）"""
     try:
         follow_up = db.query(models.FollowUp).filter(models.FollowUp.id == follow_up_id).first()
         if not follow_up:
-            logger.warning(f"报告生成失败，随访记录不存在 ID:{follow_up_id}")
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="随访记录不存在"
-            )
+            raise HTTPException(status_code=404, detail="随访记录不存在")
 
-        # 获取老人和医生的名字
-        elderly_name = follow_up.elderly.name if follow_up.elderly else ""
-        doctor_name = follow_up.doctor.name if follow_up.doctor else ""
+        # 处理 next_follow_up_date（兼容空值）
+        next_follow_up_str = None
+        if hasattr(follow_up, 'next_follow_up_date') and follow_up.next_follow_up_date:
+            next_follow_up_str = follow_up.next_follow_up_date.strftime("%Y-%m-%d %H:%M")
+
 
         return {
+            # 基本信息
             "elderly_name": follow_up.elderly.name if follow_up.elderly else "",
             "doctor_name": follow_up.doctor.name if follow_up.doctor else "",
-            "follow_up_date": follow_up.follow_up_date.strftime("%Y-%m-%d %H:%M") if follow_up.follow_up_date else "",
+            "followup_date": follow_up.followup_date.strftime("%Y-%m-%d %H:%M") if follow_up.followup_date else "",
             "content": follow_up.content or "",
-            "result": follow_up.result or "",
-            "next_follow_up_date": follow_up.next_follow_up_date.strftime("%Y-%m-%d %H:%M")
-            if follow_up.next_follow_up_date else None,
-            "medication_warning": follow_up.medication_warning or "无特殊用药禁忌"
+            "next_follow_up_date": next_follow_up_str,  # 使用处理后的值
+            "medication_warning": follow_up.medication_warning or "无特殊用药禁忌",
+
+            # 体格检查
+            "height": follow_up.height,
+            "weight": follow_up.weight,
+            "bmi": follow_up.bmi,
+            "waist_circumference": follow_up.waist_circumference,
+            "hip_circumference": follow_up.hip_circumference,
+            "waist_hip_ratio": follow_up.waist_hip_ratio,
+            "temperature": follow_up.temperature,
+
+            # 生命体征
+            "systolic_blood_pressure": follow_up.systolic_blood_pressure,
+            "diastolic_blood_pressure": follow_up.diastolic_blood_pressure,
+            "blood_oxygen": follow_up.blood_oxygen,
+            "pulse_rate": follow_up.pulse_rate,
+            "heart_rate": follow_up.heart_rate,
+            "respiration": follow_up.respiration,
+
+            # 血液检查
+            "blood_glucose": follow_up.blood_glucose,
+            "uric_acid": follow_up.uric_acid,
+            "hemoglobin": follow_up.hemoglobin,
+            "total_cholesterol": follow_up.total_cholesterol,
+            "triglycerides": follow_up.triglycerides,
+            "hdl_cholesterol": follow_up.hdl_cholesterol,
+            "ldl_cholesterol": follow_up.ldl_cholesterol,
+
+            # 其他检查
+            "fat": follow_up.fat,
+            "water_content": follow_up.water_content,
+            "bmr": follow_up.bmr,
+            "bone_density": follow_up.bone_density,
+            "fvc": follow_up.fvc,
+            "ecg": follow_up.ecg,
+            "total_sleep_time": follow_up.total_sleep_time,
+
+            # 尿常规
+            "urine_wbc": follow_up.urine_wbc,
+            "urine_nitrite": follow_up.urine_nitrite,
+            "urine_urobilinogen": follow_up.urine_urobilinogen,
+            "urine_protein": follow_up.urine_protein,
+            "urine_ph": follow_up.urine_ph,
+            "urine_blood": follow_up.urine_blood,
+            "urine_specific_gravity": follow_up.urine_specific_gravity,
+            "urine_ketone": follow_up.urine_ketone,
+            "urine_bilirubin": follow_up.urine_bilirubin,
+            "urine_glucose": follow_up.urine_glucose,
+            "urine_vitamin_c": follow_up.urine_vitamin_c,
+
+            # 其他
+            "cholesterol": follow_up.cholesterol
         }
-    except SQLAlchemyError as e:
-        logger.error(f"生成报告数据失败 ID:{follow_up_id}, 错误: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="生成报告数据失败"
-        )
+    except Exception as e:
+        logger.error(f"生成报告数据失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="生成报告数据失败")
+
 
 def delete_follow_up(db: Session, follow_up_id: int):
     """删除随访记录"""
@@ -166,6 +216,23 @@ def delete_follow_up(db: Session, follow_up_id: int):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="删除随访记录失败"
         )
+def update_follow_up(db: Session, follow_up_id: int, follow_up_update: schemas.FollowUpCreate):
+    try:
+        db_follow_up = db.query(models.FollowUp).filter(models.FollowUp.id == follow_up_id).first()
+        if not db_follow_up:
+            raise HTTPException(status_code=404, detail="随访记录不存在")
+
+        update_data = follow_up_update.dict(exclude_unset=True)
+        for key, value in update_data.items():
+            setattr(db_follow_up, key, value)
+
+        db.commit()
+        db.refresh(db_follow_up)
+        return db_follow_up
+    except Exception as e:
+        db.rollback()
+        logger.error(f"更新随访记录失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="更新随访记录失败")
 
 def get_elderly(db: Session, elderly_id: int):
     """获取老人信息"""
@@ -212,7 +279,11 @@ def create_elderly(db: Session, elderly: schemas.ElderlyCreate):
             gender=elderly.gender,
             age=elderly.age,
             contact=elderly.contact,
-            address=elderly.address
+            address=elderly.address,
+            birth_date=elderly.birth_date,
+            birth_place=elderly.birth_place,
+            education=elderly.education,
+            occupation=elderly.occupation
         )
         db.add(db_elderly)
         db.commit()
@@ -243,6 +314,32 @@ def delete_elderly(db: Session, elderly_id: int):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="删除老人信息失败"
+        )
+
+
+# 在老人管理部分添加
+def update_elderly(db: Session, elderly_id: int, elderly_update: schemas.ElderlyUpdate):
+    try:
+        db_elderly = db.query(models.Elderly).filter(models.Elderly.id == elderly_id).first()
+        if not db_elderly:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="老人信息不存在"
+            )
+
+        update_data = elderly_update.dict(exclude_unset=True)
+        for key, value in update_data.items():
+            setattr(db_elderly, key, value)
+
+        db.commit()
+        db.refresh(db_elderly)
+        return db_elderly
+    except Exception as e:
+        db.rollback()
+        logger.error(f"更新老人信息失败: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="更新老人信息失败"
         )
 
 # 医生管理
@@ -284,13 +381,63 @@ def delete_doctor(db: Session, doctor_id: int):
             detail="删除医生信息失败"
         )
 
+
+# 在医生管理部分添加
+def update_doctor(db: Session, doctor_id: int, doctor_update: schemas.DoctorUpdate):
+    try:
+        db_doctor = db.query(models.Doctor).filter(models.Doctor.id == doctor_id).first()
+        if not db_doctor:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="医生信息不存在"
+            )
+
+        update_data = doctor_update.dict(exclude_unset=True)
+        for key, value in update_data.items():
+            setattr(db_doctor, key, value)
+
+        db.commit()
+        db.refresh(db_doctor)
+        return db_doctor
+    except Exception as e:
+        db.rollback()
+        logger.error(f"更新医生信息失败: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="更新医生信息失败"
+        )
+
 #查询功能
-def get_elderlies(db: Session, skip: int = 0, limit: int = 100):
-    return db.query(models.Elderly).offset(skip).limit(limit).all()
+# crud.py
+# crud.py
+def get_doctors(db: Session, skip: int = 0, limit: int = 100, name: str = None):
+    try:
+        query = db.query(models.Doctor)
+        # 仅当 name 有值时才过滤（避免 name 为 None 时的无效过滤）
+        if name is not None and name.strip() != "":
+            query = query.filter(models.Doctor.name.ilike(f"%{name}%"))
+        # 执行查询并返回结果（即使无过滤条件，也返回所有医生）
+        return query.offset(skip).limit(limit).all()
+    except Exception as e:
+        logger.error(f"获取医生列表失败: {str(e)}")
+        # 抛出具体错误信息，方便前端排查
+        raise HTTPException(
+            status_code=500,
+            detail=f"获取医生数据失败: {str(e)}"
+        )
 
-def get_doctors(db: Session, skip: int = 0, limit: int = 100):
-    return db.query(models.Doctor).offset(skip).limit(limit).all()
+from sqlalchemy import cast, String
 
+# 修改app/crud.py中的get_elderlies方法
+def get_elderlies(db: Session, skip: int = 0, limit: int = 100, search: str = None):
+    try:
+        query = db.query(models.Elderly)
+        if search:
+            query = query.filter(models.Elderly.name.ilike(f"%{search}%"))
+        return query.order_by(models.Elderly.id).offset(skip).limit(limit).all()
+    except SQLAlchemyError as e:
+        logger.error(f"获取老人列表失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="获取老人数据失败")
 
 def schedule_follow_up_automation(db: Session):
     """自动为需要随访的老人生成随访计划"""
@@ -315,8 +462,7 @@ def schedule_follow_up_automation(db: Session):
                 elderly_id=elderly.id,
                 doctor_id=1,  # 默认分配ID为1的医生
                 follow_up_date=datetime.now() + timedelta(days=1),  # 默认明天
-                content="系统自动生成的随访计划",
-                result="待填写"
+                content="系统自动生成的随访计划"
             )
             db.add(new_follow_up)
             db.commit()

@@ -3,78 +3,354 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>医生随访报告</title>
+    <title>{{ title }}</title>
     <style>
         body {
-            font-family: Arial, sans-serif;
-            line-height: 1.6;
+            font-family: "Microsoft YaHei", sans-serif;
             margin: 0;
             padding: 20px;
             color: #333;
+        }
+        .report-container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background-color: #fff;
+            padding: 30px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
         }
         .header {
             text-align: center;
             margin-bottom: 30px;
             border-bottom: 2px solid #0066cc;
-            padding-bottom: 10px;
+            padding-bottom: 15px;
         }
         .header h1 {
             color: #0066cc;
-            margin: 0;
-        }
-        .report-section {
-            margin-bottom: 20px;
-        }
-        .section-title {
-            font-weight: bold;
-            color: #0066cc;
             margin-bottom: 5px;
         }
-        .footer {
-            margin-top: 30px;
-            text-align: right;
-            font-style: italic;
+        .header .subtitle {
             color: #666;
+            font-size: 14px;
+        }
+        .section {
+            margin-bottom: 25px;
+        }
+        .section-title {
+            background-color: #f4f7fa;
+            padding: 8px 15px;
+            font-weight: bold;
+            color: #0066cc;
+            border-left: 4px solid #0066cc;
+            margin-bottom: 15px;
+        }
+        .info-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        .info-table th {
+            background-color: #f4f7fa;
+            text-align: left;
+            padding: 10px 15px;
+            font-weight: bold;
+            border-bottom: 1px solid #ddd;
+        }
+        .info-table td {
+            padding: 10px 15px;
+            border-bottom: 1px solid #eee;
+        }
+        .info-table tr:last-child td {
+            border-bottom: none;
+        }
+        .health-metrics {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .metric-card {
+            border: 1px solid #eee;
+            border-radius: 4px;
+            padding: 15px;
+            background-color: #f9f9f9;
+        }
+        .metric-title {
+            font-weight: bold;
+            margin-bottom: 5px;
+            color: #0066cc;
+        }
+        .metric-value {
+            font-size: 18px;
+        }
+        .metric-unit {
+            font-size: 14px;
+            color: #666;
+        }
+        .footer {
+            text-align: right;
+            margin-top: 30px;
+            font-size: 14px;
+            color: #666;
+            border-top: 1px solid #eee;
+            padding-top: 15px;
+        }
+        .signature {
+            margin-top: 50px;
+            display: flex;
+            justify-content: space-between;
+        }
+        .signature-box {
+            text-align: center;
+            width: 200px;
+            border-top: 1px solid #333;
+            padding-top: 5px;
+            margin-top: 50px;
         }
     </style>
 </head>
 <body>
-    <div class="header">
-        <h1>老年人健康随访报告</h1>
-        <p>报告生成时间：{{ now }}</p>
-    </div>
+    <div class="report-container">
+        <div class="header">
+            <h1>{{ title }}</h1>
+            <div class="subtitle">生成时间：{{ now }}</div>
+        </div>
 
-    <div class="report-section">
-        <div class="section-title">基本信息</div>
-        <p><strong>老年人姓名：</strong>{{ report.elderly_name }}</p>
-        <p><strong>随访医生：</strong>{{ report.doctor_name }}</p>
-        <p><strong>随访时间：</strong>{{ report.follow_up_date }}</p>
-    </div>
+        <!-- 基本信息 -->
+        <div class="section">
+            <div class="section-title">基本信息</div>
+            <table class="info-table">
+                <tr>
+                    <th width="15%">老人姓名</th>
+                    <td width="35%">{{ report.elderly_name }}</td>
+                    <th width="15%">医生姓名</th>
+                    <td width="35%">{{ report.doctor_name }}</td>
+                </tr>
+                <tr>
+                    <th>随访日期</th>
+                    <td>{{ report.followup_date }}</td>
+                    <th>下次随访日期</th>
+                    <td>{{ report.next_follow_up_date or '未设置' }}</td>
+                </tr>
+            </table>
+        </div>
 
-    <div class="report-section">
-        <div class="section-title">随访内容</div>
-        <p>{{ report.content }}</p>
-    </div>
+        <!-- 随访内容 -->
+        <div class="section">
+            <div class="section-title">随访内容</div>
+            <div style="padding: 15px; border: 1px solid #eee; border-radius: 4px; background-color: #f9f9f9;">
+                {{ report.content or "无记录" }}
+            </div>
+        </div>
 
-    <div class="report-section">
-        <div class="section-title">随访结果</div>
-        <p>{{ report.result }}</p>
-    </div>
+        <!-- 体格检查 -->
+        <div class="section">
+            <div class="section-title">体格检查</div>
+            <div class="health-metrics">
+                <div class="metric-card">
+                    <div class="metric-title">身高</div>
+                    <div class="metric-value">{{ report.height or '-' }} <span class="metric-unit">cm</span></div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-title">体重</div>
+                    <div class="metric-value">{{ report.weight or '-' }} <span class="metric-unit">kg</span></div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-title">BMI指数</div>
+                    <div class="metric-value">{{ report.bmi or '-' }}</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-title">腰围</div>
+                    <div class="metric-value">{{ report.waist_circumference or '-' }} <span class="metric-unit">cm</span></div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-title">臀围</div>
+                    <div class="metric-value">{{ report.hip_circumference or '-' }} <span class="metric-unit">cm</span></div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-title">腰臀比</div>
+                    <div class="metric-value">{{ report.waist_hip_ratio or '-' }}</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-title">体温</div>
+                    <div class="metric-value">{{ report.temperature or '-' }} <span class="metric-unit">°C</span></div>
+                </div>
+            </div>
+        </div>
 
-    <div class="section">
-        <h3>用药禁忌</h3>
-        <p>{{ report.medication_warning }}</p>
-    </div>
+        <!-- 生命体征 -->
+        <div class="section">
+            <div class="section-title">生命体征</div>
+            <div class="health-metrics">
+                <div class="metric-card">
+                    <div class="metric-title">血压</div>
+                    <div class="metric-value">
+                        {% if report.systolic_blood_pressure and report.diastolic_blood_pressure %}
+                        {{ report.systolic_blood_pressure }}/{{ report.diastolic_blood_pressure }} mmHg
+                        {% else %}
+                        -
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-title">血氧</div>
+                    <div class="metric-value">{{ report.blood_oxygen or '-' }} <span class="metric-unit">%</span></div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-title">脉率</div>
+                    <div class="metric-value">{{ report.pulse_rate or '-' }} <span class="metric-unit">次/分</span></div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-title">心率</div>
+                    <div class="metric-value">{{ report.heart_rate or '-' }} <span class="metric-unit">次/分</span></div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-title">呼吸</div>
+                    <div class="metric-value">{{ report.respiration or '-' }} <span class="metric-unit">次/分</span></div>
+                </div>
+            </div>
+        </div>
 
-    {% if report.next_follow_up_date %}
-    <div class="report-section">
-        <div class="section-title">下次随访时间</div>
-        <p>{{ report.next_follow_up_date }}</p>
-    </div>
-    {% endif %}
+        <!-- 血液检查 -->
+        <div class="section">
+            <div class="section-title">血液检查</div>
+            <div class="health-metrics">
+                <div class="metric-card">
+                    <div class="metric-title">血糖</div>
+                    <div class="metric-value">{{ report.blood_glucose or '-' }} <span class="metric-unit">mmol/L</span></div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-title">尿酸</div>
+                    <div class="metric-value">{{ report.uric_acid or '-' }} <span class="metric-unit">μmol/L</span></div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-title">血红蛋白</div>
+                    <div class="metric-value">{{ report.hemoglobin or '-' }} <span class="metric-unit">g/L</span></div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-title">总胆固醇</div>
+                    <div class="metric-value">{{ report.total_cholesterol or '-' }} <span class="metric-unit">mmol/L</span></div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-title">甘油三酯</div>
+                    <div class="metric-value">{{ report.triglycerides or '-' }} <span class="metric-unit">mmol/L</span></div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-title">高密度脂蛋白</div>
+                    <div class="metric-value">{{ report.hdl_cholesterol or '-' }} <span class="metric-unit">mmol/L</span></div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-title">低密度脂蛋白</div>
+                    <div class="metric-value">{{ report.ldl_cholesterol or '-' }} <span class="metric-unit">mmol/L</span></div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-title">胆固醇</div>
+                    <div class="metric-value">{{ report.cholesterol or '-' }} <span class="metric-unit">mmol/L</span></div>
+                </div>
+            </div>
+        </div>
 
-    <div class="footer">
-        <p>报告生成时间：{{ now }}</p>
+        <!-- 其他检查 -->
+        <div class="section">
+            <div class="section-title">其他检查</div>
+            <div class="health-metrics">
+                <div class="metric-card">
+                    <div class="metric-title">脂肪率</div>
+                    <div class="metric-value">{{ report.fat or '-' }} <span class="metric-unit">%</span></div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-title">水分含量</div>
+                    <div class="metric-value">{{ report.water_content or '-' }} <span class="metric-unit">%</span></div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-title">基础代谢率</div>
+                    <div class="metric-value">{{ report.bmr or '-' }} <span class="metric-unit">kcal/day</span></div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-title">骨密度</div>
+                    <div class="metric-value">{{ report.bone_density or '-' }} <span class="metric-unit">g/cm²</span></div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-title">用力肺活量</div>
+                    <div class="metric-value">{{ report.fvc or '-' }} <span class="metric-unit">L</span></div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-title">心电图</div>
+                    <div class="metric-value">{{ report.ecg or '-' }}</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-title">睡眠总时长</div>
+                    <div class="metric-value">{{ report.total_sleep_time or '-' }} <span class="metric-unit">小时</span></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 尿常规 -->
+        <div class="section">
+            <div class="section-title">尿常规检查</div>
+            <div class="health-metrics">
+                <div class="metric-card">
+                    <div class="metric-title">白细胞</div>
+                    <div class="metric-value">{{ report.urine_wbc or '-' }}</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-title">亚硝酸盐</div>
+                    <div class="metric-value">{{ report.urine_nitrite or '-' }}</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-title">尿胆原</div>
+                    <div class="metric-value">{{ report.urine_urobilinogen or '-' }}</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-title">蛋白质</div>
+                    <div class="metric-value">{{ report.urine_protein or '-' }}</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-title">PH值</div>
+                    <div class="metric-value">{{ report.urine_ph or '-' }}</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-title">潜血</div>
+                    <div class="metric-value">{{ report.urine_blood or '-' }}</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-title">比重</div>
+                    <div class="metric-value">{{ report.urine_specific_gravity or '-' }}</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-title">酮体</div>
+                    <div class="metric-value">{{ report.urine_ketone or '-' }}</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-title">胆红素</div>
+                    <div class="metric-value">{{ report.urine_bilirubin or '-' }}</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-title">葡萄糖</div>
+                    <div class="metric-value">{{ report.urine_glucose or '-' }}</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-title">维生素C</div>
+                    <div class="metric-value">{{ report.urine_vitamin_c or '-' }}</div>
+                </div>
+            </div>
+        </div>
+
+
+        <!-- 用药禁忌 -->
+        <div class="section">
+            <div class="section-title">用药禁忌</div>
+            <div style="padding: 15px; border: 1px solid #eee; border-radius: 4px; background-color: #f9f9f9;">
+                {{ report.medication_warning or "无特殊用药禁忌" }}
+            </div>
+        </div>
+
+        <div class="footer">
+            本报告由老年人健康管理系统自动生成，仅供参考，具体诊断和治疗请遵医嘱。
+            <div class="signature">
+                <div class="signature-box">医生签名：________________</div>
+                <div class="signature-box">老人/家属签名：________________</div>
+            </div>
+        </div>
     </div>
 </body>
 </html>
